@@ -1,3 +1,4 @@
+
 #include <EEPROM.h>
 #include <LiquidCrystal.h>
 #include <MsTimer2.h>
@@ -204,11 +205,12 @@ uint16_t eedat;
   }
 }
 void loop() {
-  if(ms%500!=0) {
+  if(ms%100!=0) {
 //不到0.5S， cpu休眠，等待time中断唤醒。
-    set_sleep_mode (SLEEP_MODE_PWR_SAVE);
+    set_sleep_mode (SLEEP_MODE_IDLE);
     sleep_enable();
-    sleep_cpu (); 
+    sleep_cpu ();
+    return;
 }
   lcd.setCursor(0,0);
   if(i_error>0) { //大电流保护，
