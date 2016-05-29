@@ -6,7 +6,7 @@
 SdFat sd;
 SdFile myFile;
 #define chipSelect  10
-
+const char * logo ="github.com/lshw";
 int led = 13;
 #define VBAT A0 //电源电压
 #define VOUT A1  //LOW-打开输出
@@ -44,7 +44,7 @@ void geti(){
   else  adc=I03; //使用I03采样
 i0=  analogRead(adc);
 i0= analogRead(adc);
-  r3=digitalRead(R3); 
+  r3=digitalRead(R3);
   r33=digitalRead(R33);
   r333=digitalRead(R333);
   r=330; //计算采样电阻值
@@ -98,14 +98,14 @@ void seta(){ //每毫秒一次时间中断服务，采样电流和电压， 根�
       }
   }
   else if(ua<10000) { //电流1-10ma 用36.63欧姆采样
-    if(r3!=LOW || r33!=LOW || r333 !=HIGH){ 
+    if(r3!=LOW || r33!=LOW || r333 !=HIGH){
      digitalWrite(R3,LOW);
       digitalWrite(R33,LOW);
       digitalWrite(R333,HIGH);
     }
   }
   else if(ua<100000) { //电流10-100ma，用3.63欧姆
-    if(r3!=LOW || r33!=HIGH || r333 !=HIGH){ 
+    if(r3!=LOW || r33!=HIGH || r333 !=HIGH){
       digitalWrite(R3,LOW);
       digitalWrite(R33,HIGH);
       digitalWrite(R333,HIGH);
@@ -131,7 +131,7 @@ char filename[15]="DAT00001.TXT\0";
 void init_filename() {
   uint16_t eedat;
   eedat=EEPROM.read(0xff)+0x100;  //为了防止频繁取写同一个地址， 没1000次写入， 就换一个存储器
-  file_no=EEPROM.read(eedat)<<8 | EEPROM.read(eedat+0x100); //使用0x100-0x2ff;  
+  file_no=EEPROM.read(eedat)<<8 | EEPROM.read(eedat+0x100); //使用0x100-0x2ff;
   file_no++;  //每次启动都把文件序号加一
   if(file_no>=100000) file_no=0; //最大10万；
   if(file_no/1000 != eedat) { //每1000次换个地址
@@ -140,29 +140,42 @@ void init_filename() {
   }
   snprintf(filename,13,"DAT%05d.TXT",file_no);
 }
-void setup() { 
+void eeprom_init(){
+  uint16_t i;
+  if(EEPROM.read(0x301)!='S' || EEPROM.read(0x202) !='W') {//初始化eeprom
+    for(i=0;i<0x400;i++) EEPROM.write(i,0);
+    EEPROM.write(0x301,'S');
+    EEPROM.write(0x202,'W');
+    for(i=0;i<16;i++)
+    if(strlen(logo) >i)
+    EEPROM.write(i,logo[i]);
+    else
+    EEPROM.write(i,' ');
+  }
+}
+void setup() {
   const  char * hello="iLogger V1.1";
-  analogReference(INTERNAL);//atmega328 -> 基准电压1.1v  
+  uint16_t i;
+  eeprom_init();
+  analogReference(INTERNAL);//atmega328 -> 基准电压1.1v
   lcd.begin(16, 2);
   Serial.begin(115200);
   Serial.println(hello);
   lcd.print(hello);
-  pinMode(VOUT,OUTPUT); 
+  lcd.setCursor(0,1);
+  for(i=0;i<16;i++)
+  lcd.write(EEPROM.read(i));
+  pinMode(VOUT,OUTPUT);
   digitalWrite(VOUT,LOW);   //打开输出
-  analogWrite(LAMP,40); 
+  analogWrite(LAMP,40);
   MsTimer2::set(1, seta); //每 1ms 时间中断一次， 调用seta();
   pinMode(R3,OUTPUT);
-  digitalWrite(R3,HIGH);  
+  digitalWrite(R3,HIGH);
   pinMode(R33,OUTPUT);
   digitalWrite(R33,HIGH);
   pinMode(R333,OUTPUT);
   digitalWrite(R333,HIGH);
   MsTimer2::start(); //1ms每次的时间中断开始。
-  if(EEPROM.read(0x301)!='L' || EEPROM.read(0x202) !='S') {//初始化eeprom
-    for(uint16_t i=0;i<0x300;i++) EEPROM.write(i,0);
-    EEPROM.write(0x301,'L');
-    EEPROM.write(0x202,'S');
-  }
   have_sd=sd.begin(chipSelect, SPI_HALF_SPEED);
   if(have_sd) {
   init_filename();//根据file_no 生成文件名，放在filename
@@ -172,8 +185,8 @@ void setup() {
       myFile.close();
     }
   }
-   pinMode(led, OUTPUT);
- 
+  while(millis()<2000) ;
+  pinMode(led, OUTPUT);
 }
 void lcd_f2(uint16_t dat){//除以1000显示2位小数
   uint16_t xs;
@@ -204,7 +217,8 @@ void msave(){//每分钟写一次cdcard
   }
 }
 void power_down(){
- for(uint8_t i=0;i<23;i++) {
+uint16_t i;
+ for(i=0;i<23;i++) {
  pinMode(i,INPUT);
  digitalWrite(i,LOW);
  }
@@ -219,18 +233,20 @@ void power_down(){
     sleep_enable();
     sleep_cpu ();
 }
-void loop() { 
+void loop() {
+  uint16_t i;
   analogWrite(LAMP,40);
   if(ms%500!=0) {
   //不到0.1S， cpu休眠，等待time中断唤醒。
     set_sleep_mode (SLEEP_MODE_IDLE); //虽然IDLE模式省电不多， 但是不影响PWM输出的背光控制。
     sleep_enable();
     sleep_cpu ();
-    return; 
+    return;
   }
-  if(s%5==0) 
+  if(ms%5==0){
     if(ms==0) digitalWrite(led,HIGH);
      else digitalWrite(led,LOW);
+  }
   lcd.setCursor(0,0);
   if(i_error>0) { //大电流保护，
     analogWrite(LAMP,i_error/5%200+50); //背光闪烁 /5是慢一点， %200是 0-200调光， +50是背光调整到50-250之间变化， 一秒一个循环。
@@ -249,7 +265,7 @@ void loop() {
     lcd.write(0xe4); //微
   }
   else{
-    if(ua<10000) 
+    if(ua<10000)
       lcd_f2(ua);
     else lcd.print(ua/1000);
     lcd.print('m');
@@ -265,8 +281,9 @@ void loop() {
   lcd.setCursor(0,1);   //lcd第二行
   if(m_uams==0){
     if(have_sd) {
-      for(uint8_t i=3;i<8;i++)
+      for(i=3;i<8;i++)
       lcd.print(filename[i]);//开始无电流时显示当次sd文件序号
+      lcd.print("         ");
     } else
       lcd.print("0 mAH      ");  //无sd卡时显示0mah
   }
@@ -278,11 +295,11 @@ void loop() {
   else{
     if(m_uams<60000) {  //1000微安时以下,单位显示uAH
       lcd.print(m_uams/60); //微安*分钟->微安*时
-      lcd.write(0xe4); 
+      lcd.write(0xe4);
     }
     else{ //超过1000微安时，单位显示mAH
       lcd.print(m_uams/60000); //微安*分钟->毫安*时
-      lcd.print("m"); 
+      lcd.print("m");
     }
     lcd.print("AH   "); //清后面的残留字符
   }
@@ -301,7 +318,7 @@ void loop() {
     lcd.setCursor(14,0);
     lcd.print(" ");
   }
-  if(last0+600000 <millis() || v<3200){ 
+  if(last0+600000 <millis() || v<3200){
   delay(100);
   if(last0+600000 <millis() || v<3200)
     power_down();
