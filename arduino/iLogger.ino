@@ -46,7 +46,7 @@ void geti() {
   for (uint8_t i = 0; i < 3; i++) { //循环切换档位
     i0 = analogRead(adc);
     if (i0 > 300) i0 = analogRead(adc);
-    if (i0 > 250 & r > 330) { //调低采样电阻
+    if (i0 > 200 & r > 330) { //调低采样电阻
       if (r >= 330000) {
         digitalWrite(R333, HIGH);
         digitalWrite(R33, LOW);
@@ -68,7 +68,7 @@ void geti() {
         adc = I03;
       }
       continue;//循环切换档位
-    } else if (i0 < 20 & r <  330000) { //调高
+    } else if (i0 < 15 & r <  330000) { //调高
       if (r <= 330) {
         Serial.println(i0);
         digitalWrite(R3, LOW);
