@@ -38,6 +38,7 @@ uint16_t  v, i_error = 0; //v->电池电压mv，电流大于2A，报警倒计数
 uint32_t mv; //采样值 mv，
 uint32_t r;//采样电阻，毫欧
 uint32_t ua = 0; //当前电流微安
+uint32_t is=0; //前一秒的平均电流
 uint32_t uams = 0; //微安毫秒累加
 uint32_t uas = 0; //微安秒累加
 uint32_t uam = 0; //分钟平均电流
@@ -102,7 +103,8 @@ void seta() { //每毫秒一次时间中断服务，采样电流和电压， 根
   uams += ua; //微安*毫秒 累加
   if (ms >= 1000) { //整秒？
     ms = 0;
-    uas += (uams / 1000); //微安*秒 累加
+    is=uams/1000; //前一秒的平均电流
+    uas += is; //微安*秒 累加
     uams = 0;
     s++;
     if (s >= 60) {
@@ -270,14 +272,14 @@ void loop() {
   if (millis() < 2000) return;
   lcd_f2(getv()); //显示电池电压，2位小数
   lcd.print("V ");
-  if (ua < 1000) {
-    lcd.print(ua); //电流
+  if (is < 1000) {
+    lcd.print(is); //电流
     lcd.write(0xe4); //微
   }
   else {
-    if (ua < 10000)
-      lcd_f2(ua);
-    else lcd.print(ua / 1000);
+    if (is < 10000)
+      lcd_f2(is);
+    else lcd.print(is / 1000);
     lcd.print('m');
   }
   lcd.print("A                ");
