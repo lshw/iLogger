@@ -7,7 +7,7 @@
 SdFat sd;
 SdFile myFile;
 #define chipSelect  10
-const char * logo = "github.com/lshw";
+const char * logo = "github.com/lshw ";
 #define VBAT A0 //电源电压
 #define VOUT A1  //LOW-打开输出
 #ifdef NEWPCB
@@ -26,7 +26,6 @@ const char * logo = "github.com/lshw";
 
 #define getv() (uint32_t) analogRead(VBAT) * 11 * 1100 / 1024 - mv
 
-#include <SdFat.h>
 boolean have_sd = false;
 uint16_t file_no;
 uint32_t last0 = 0; //最后非零时间 用于休眠
@@ -44,48 +43,51 @@ uint32_t uas = 0; //微安秒累加
 uint32_t uam = 0; //分钟平均电流
 uint32_t m_uams = 0; //分钟累计电流
 void geti() {
-  i0 = analogRead(adc);
-
-  while (1) { //循环切换档位
+  for (uint8_t i = 0; i < 3; i++) { //循环切换档位
     i0 = analogRead(adc);
-    if (i0 > 700 & r != 330) { //调低采样电阻
-      switch (r) {
-        case 330+3300+33000+330000:
-          digitalWrite(R333, HIGH);
-          r = 330 + 3300 + 33000; //lll->llh
-          adc = I33;
-          break;
-        case 330+3300+33000://llh->lhh
-          digitalWrite(R33, HIGH);
-          r = 330 + 3300;
-          //adc=I33;
-          break;
-        case 330+3300://lhh->hhh
-          digitalWrite(R3, HIGH);
-          r = 330;
-          adc = I03;
-          break;
-
+    if (i0 > 300) i0 = analogRead(adc);
+    if (i0 > 250 & r > 330) { //调低采样电阻
+      if (r >= 330000) {
+        digitalWrite(R333, HIGH);
+        digitalWrite(R33, LOW);
+        digitalWrite(R3, LOW);
+        r = 330 + 3300 + 33000; //lll->llh
+        adc = I33;
+      } else if (r >= 33000) {
+        digitalWrite(R333, HIGH);
+        digitalWrite(R33, HIGH);
+        digitalWrite(R3, LOW);
+        r = 330 + 3300;
+        adc = I33;
+      } else if (r >= 3300) {
+        Serial.println(i0);
+        digitalWrite(R333, HIGH);
+        digitalWrite(R33, HIGH);
+        digitalWrite(R3, HIGH);
+        r = 330;
+        adc = I03;
       }
       continue;//循环切换档位
-    } else if (i0 < 300 & r != 330 + 3300 + 33000 + 330000) { //调高
-      switch (r) {
-        case 330://hhh-lhh
-          digitalWrite(R3, LOW);
-          r = 330 + 3300;
-          adc = I33;
-          break;
-        case 330+3300://lhh->llh
-          digitalWrite(R33, LOW);
-          r = 330 + 3300 + 33000;
-          //adc=I33;
-          break;
-        case 330+3300+33000: //llh->lll
-          digitalWrite(R333, LOW);
-          r = 330 + 3300 + 33000 + 330000;
-          adc = I333;
-          break;
-
+    } else if (i0 < 20 & r <  330000) { //调高
+      if (r <= 330) {
+        Serial.println(i0);
+        digitalWrite(R3, LOW);
+        digitalWrite(R33, HIGH);
+        digitalWrite(R333, HIGH);
+        r = 330 + 3300;
+        adc = I33;
+      } else if (r <= 330 + 3300) {
+        digitalWrite(R3, LOW);
+        digitalWrite(R33, LOW);
+        digitalWrite(R333, HIGH);
+        r = 330 + 3300 + 33000;
+        adc = I33;
+      } else if (r <= 330 + 3300 + 33000) {
+        digitalWrite(R3, LOW);
+        digitalWrite(R33, LOW);
+        digitalWrite(R333, LOW);
+        r = 330 + 3300 + 33000 + 330000;
+        adc = I333;
       }
       continue;//循环切换档位
     }
@@ -96,6 +98,7 @@ void geti() {
 }
 void seta() { //每毫秒一次时间中断服务，采样电流和电压， 根据电流切换档位，
   ms++;  //毫秒计数
+  geti();
   uams += ua; //微安*毫秒 累加
   if (ms >= 1000) { //整秒？
     ms = 0;
@@ -131,13 +134,12 @@ void seta() { //每毫秒一次时间中断服务，采样电流和电压， 根
       i_error = 10000; //电流超过2A，关闭10秒
     return;
   }
-
   if (ua != 0) {
     last0 = millis();
   }
   v = getv(); //电池电压
 }
-char filename[15] = "DAT00001.TXT\0";
+char filename[15] = "DAT00001.CSV\0";
 void init_filename() {
   uint16_t eedat;
   eedat = EEPROM.read(0xff) + 0x100; //为了防止频繁取写同一个地址， 没1000次写入， 就换一个存储器
@@ -250,6 +252,7 @@ void loop() {
     set_sleep_mode (SLEEP_MODE_IDLE); //虽然IDLE模式省电不多， 但是不影响PWM输出的背光控制。
     sleep_enable();
     sleep_cpu ();
+    analogRead(adc);
     return;
   }
 
