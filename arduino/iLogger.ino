@@ -196,7 +196,7 @@ void setup() {
     init_filename();//根据file_no 生成文件名，放在filename
     sd.remove(filename);
     if (myFile.open(filename, O_RDWR | O_CREAT | O_AT_END)) {
-      myFile.println("hour,minute,I(ua),total(ua*minute)");
+      myFile.println("hh:mm,hour,minute,V(mv),I(ua),total(ua*minute)");
       myFile.close();
     }
   }
@@ -214,9 +214,20 @@ void lcd_f2(uint16_t dat) { //除以1000显示2位小数
 void msave() { //每分钟写一次cdcard
   uint16_t eedat;
   if (!myFile.open(filename, O_RDWR | O_CREAT | O_AT_END)) return;
+ 
+  myFile.print("\"");
+  if(h<10) myFile.print("0");
+  myFile.print(h);
+  myFile.print(":");
+  if(m<10) myFile.print("0");
+  myFile.print(m);
+  myFile.print("\"");
+  myFile.print(",");
   myFile.print(h);
   myFile.print(",");
   myFile.print(m);
+  myFile.print(",");
+  myFile.print(v);
   myFile.print(",");
   myFile.print(uam);
   myFile.print(",");
