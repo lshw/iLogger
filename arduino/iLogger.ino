@@ -24,7 +24,6 @@ const char * logo = "github.com/lshw ";
 #define LAMP 9  //LCD背光
 #define LCDEN 7
 
-#define getv() (uint32_t) analogRead(VBAT) * 11 * 1100 / 1024 - mv
 
 boolean have_sd = false;
 uint16_t file_no;
@@ -139,7 +138,7 @@ void seta() { //每毫秒一次时间中断服务，采样电流和电压， 根
   if (ua != 0) {
     last0 = millis();
   }
-  v = getv(); //电池电压
+  v = (uint32_t) analogRead(VBAT) * 11 * 1100 / 1024 - mv; //电池电压
 }
 char filename[15] = "DAT00001.CSV\0";
 void init_filename() {
@@ -270,7 +269,7 @@ void loop() {
 
   analogWrite(LAMP, 40);
   if (millis() < 2000) return;
-  lcd_f2(getv()); //显示电池电压，2位小数
+  lcd_f2(v); //显示电池电压，2位小数
   lcd.print("V ");
   if (is < 1000) {
     lcd.print(is); //电流
