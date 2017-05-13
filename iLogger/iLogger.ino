@@ -175,6 +175,29 @@ void eeprom_init() {
         EEPROM.write(i + 0x11, ' ');
   }
 }
+
+boolean dogup = false;
+#define REBOOT_   asm volatile ("  jmp 0")
+uint8_t dogcount = 0;
+ISR(WDT_vect) {
+  dogup = true;
+  if (dogcount > 10) REBOOT_;
+}
+
+void setup_watchdog(int ii) {
+  byte bb;
+  if (ii > 9 ) ii = 9;
+  bb = ii & 7;
+  if (ii > 7) bb |= (1 << 5);
+  bb |= (1 << WDCE);
+  MCUSR &= ~(1 << WDRF);
+  // start timed sequence
+  WDTCSR |= (1 << WDCE) | (1 << WDE);
+  // set new watchdog timeout value
+  WDTCSR = bb;
+  WDTCSR |= _BV(WDIE);
+}
+
 void setup() {
   uint16_t i;
   pinMode(LAMP, OUTPUT);
@@ -210,6 +233,7 @@ void setup() {
     }
   }
 #endif
+  setup_watchdog(WDTO_4S); //4s
 
   analogWrite(LAMP, 40);
 }
@@ -292,7 +316,7 @@ void power_down() {
   lcd.noDisplay();
   set_sleep_mode (SLEEP_MODE_PWR_DOWN);
   sleep_enable();
-  if (v < 3200) wdt_disable(); //电压过低， 不再唤醒
+  if (v < 3100) wdt_disable(); //电压过低， 不再唤醒
   sleep_cpu ();
   s = s + 4; //4秒唤醒;
   if (s >= 60) {
@@ -406,13 +430,14 @@ void loop() {
     lcd.print(" ");
   }
 
-  if (last0 + 600000 < millis() || v < 3200) {
-    if (v < 3200) delay(100);
-    if (last0 + 600000 < millis() || v < 3200) {
+  if (last0 + 600000 < millis() || v < 3100) {
+    if (v < 3100) delay(100);
+    if (last0 + 600000 < millis() || v < 3100) {
+      MsTimer2::stop(); //1ms每次的时间中断关闭。
       power_down();
     }
   }
-  wdt_reset();
+  dogcount = 0;//喂狗
 #if defined(__AVR_ATmega328P__)
   if (millis() > recTime + 200 & bf != tf) {
     com2sd();
