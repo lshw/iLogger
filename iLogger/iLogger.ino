@@ -338,6 +338,17 @@ void power_down() {
      Serial.flush();
   */
 }
+
+int8_t csq = -1;
+int8_t getcsq() {  //从串口接一个通讯模块， 用csq命令读出信号强度， 并显示在屏幕上第一行最右边
+  Serial.print(F("AT+CSQ\r\n"));
+  if (Serial.find("CSQ:")) { //寻找+CSQ:16,31  100ms潮湿
+    csq = Serial.parseInt();
+    last0 = millis();
+  } else
+    Serial.print("AT\r\n");  //多次发送AT ,让modem可以进行自适应速率调整。
+}
+
 void loop() {
   uint16_t i;
   if (ms % 500 != 0) {
@@ -348,6 +359,8 @@ void loop() {
     analogRead(adc);
     return;
   }
+
+  if (ms % 1000 == 0) getcsq();
 
   lcd.setCursor(0, 0);
   if (i_error > 0) { //大电流保护，
@@ -375,12 +388,18 @@ void loop() {
   }
   lcd.print(F("A                "));
   lcd.setCursor(14, 0);
-  if (have_sd) lcd.print("S"); //在存入sdcard时，让屏幕的S闪动一下
-  else lcd.print(" ");
-  if (r == 330) lcd.print('D'); //第4档位测流
-  else if ( r == 330 + 3300) lcd.print('C'); //第3档位
-  else if (r == 330 + 3300 + 33000) lcd.print('B'); //第2档位
-  else lcd.print('A'); //第1档位
+  if (csq == -1) {
+    if (have_sd) lcd.print("S"); //在存入sdcard时，让屏幕的S闪动一下
+    else lcd.print(" ");
+    if (r == 330) lcd.print('D'); //第4档位测流
+    else if ( r == 330 + 3300) lcd.print('C'); //第3档位
+    else if (r == 330 + 3300 + 33000) lcd.print('B'); //第2档位
+    else lcd.print('A'); //第1档位
+  } else {
+    if (csq < 10) lcd.print(' ');
+    lcd.print(csq);
+  }
+
   lcd.setCursor(0, 1);  //lcd第二行
   if (m_uams == 0) {
     if (have_sd) {
