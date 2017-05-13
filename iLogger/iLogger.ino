@@ -1,13 +1,20 @@
 #define  NEWPCB 1   //如果是输出接口是2个腿的，就是老版本的，要把本行注释掉，
+//型号选择UNO或者  LiLyPad Arduino 168,或者LiLyPad Arduino 328, 其中168 ram/rom都不够，所以无SD卡功能
 #include <EEPROM.h>
 #include <LiquidCrystal.h>
 #include <MsTimer2.h>
+
 #include <avr/sleep.h>
+#include <avr/wdt.h>
+#include <avr/sleep.h>
+#if defined(__AVR_ATmega328P__) //  168内存不够，不能带SD卡功能
+#define USE_SEPARATE_FAT_CACHE 0
 #include <SdFat.h>
-SdFat sd;
-SdFile myFile;
+SdFat card;
+File myFile;
 #define chipSelect  10
-const char * logo = "github.com/lshw ";
+#endif
+const char  *logo  = "github.com/lshw ";
 #define VBAT A0 //电源电压
 #define VOUT A1  //LOW-打开输出
 #ifdef NEWPCB
@@ -24,20 +31,22 @@ const char * logo = "github.com/lshw ";
 #define LAMP 9  //LCD背光
 #define LCDEN 7
 
-
+uint8_t buff[120], bf = 0, tf = 0;
+uint32_t recTime = 0;
 boolean have_sd = false;
 uint16_t file_no;
 uint32_t last0 = 0; //最后非零时间 用于休眠
 LiquidCrystal lcd(8, LCDEN, 6, 5, 4, 3); //rs,en,d4,d5,d6,d7
 __volatile__ uint16_t i0;
-uint8_t h = 0, m = 0, s = 0, adc = I333;
+uint8_t m = 0, s = 0, adc = I333;
 uint16_t ms = 0;
+uint16_t h = 0;
 boolean m_save = false; //主循环需要保存当前分钟电流
 uint16_t  v, i_error = 0; //v->电池电压mv，电流大于2A，报警倒计数（ms)
 uint32_t mv; //采样值 mv，
 uint32_t r;//采样电阻，毫欧
 uint32_t ua = 0; //当前电流微安
-uint32_t is=0; //前一秒的平均电流
+uint32_t is = 0; //前一秒的平均电流
 uint32_t uams = 0; //微安毫秒累加
 uint32_t uas = 0; //微安秒累加
 uint32_t uam = 0; //分钟平均电流
@@ -102,7 +111,7 @@ void seta() { //每毫秒一次时间中断服务，采样电流和电压， 根
   uams += ua; //微安*毫秒 累加
   if (ms >= 1000) { //整秒？
     ms = 0;
-    is=uams/1000; //前一秒的平均电流
+    is = uams / 1000; //前一秒的平均电流
     uas += is; //微安*秒 累加
     uams = 0;
     s++;
@@ -143,7 +152,7 @@ void seta() { //每毫秒一次时间中断服务，采样电流和电压， 根
 char filename[15] = "DAT00001.CSV\0";
 void init_filename() {
   uint16_t eedat;
-  eedat = EEPROM.read(0xff) + 0x100; //为了防止频繁取写同一个地址， 没1000次写入， 就换一个存储器
+  eedat = EEPROM.read(0xff) + 0x100; //为了防止频繁取写同一个地址， 每1000次写入， 就换一个存储器
   file_no = EEPROM.read(eedat) << 8 | EEPROM.read(eedat + 0x100); //使用0x100-0x2ff;
   file_no++;  //每次启动都把文件序号加一
   if (file_no >= 100000) file_no = 0; //最大10万；
@@ -167,7 +176,6 @@ void eeprom_init() {
   }
 }
 void setup() {
-  const  char * hello = "iLogger V1.4";
   uint16_t i;
   pinMode(LAMP, OUTPUT);
   analogWrite(LAMP, 40);
@@ -175,8 +183,8 @@ void setup() {
   analogReference(INTERNAL);//atmega328 -> 基准电压1.1v
   lcd.begin(16, 2);
   Serial.begin(115200);
-  Serial.println(hello);
-  lcd.print(hello);
+  Serial.println(F("iLogger V1.7"));
+  lcd.print(F("iLogger V1.7"));
   lcd.setCursor(0, 1);
   for (i = 0; i < 16; i++)
     lcd.write(EEPROM.read(i + 0x11));
@@ -191,15 +199,19 @@ void setup() {
   digitalWrite(R333, HIGH);
   r = 330;
   MsTimer2::start(); //1ms每次的时间中断开始。
-  have_sd = sd.begin(chipSelect, SPI_HALF_SPEED);
+#if defined(__AVR_ATmega328P__)
+  have_sd = card.begin(chipSelect);
   if (have_sd) {
     init_filename();//根据file_no 生成文件名，放在filename
-    sd.remove(filename);
+    card.remove(filename);
     if (myFile.open(filename, O_RDWR | O_CREAT | O_AT_END)) {
-      myFile.println("hh:mm,hour,minute,V(mv),I(ua),total(ua*minute)");
+      myFile.println(F("hh:mm:ss,hour,minute,V(mv),I(ua),total(ua*minute)"));
       myFile.close();
     }
   }
+#endif
+
+  analogWrite(LAMP, 40);
 }
 void lcd_f2(uint16_t dat) { //除以1000显示2位小数
   uint16_t xs;
@@ -210,19 +222,18 @@ void lcd_f2(uint16_t dat) { //除以1000显示2位小数
   if (xs < 10) lcd.print('0');
   lcd.print(xs);
 }
-
+#if defined(__AVR_ATmega328P__)
 void msave() { //每分钟写一次cdcard
-  uint16_t eedat;
   if (!myFile.open(filename, O_RDWR | O_CREAT | O_AT_END)) return;
- 
   myFile.print("\"");
-  if(h<10) myFile.print("0");
+  if (h < 10) myFile.print("0");
   myFile.print(h);
   myFile.print(":");
-  if(m<10) myFile.print("0");
-  myFile.print(m);
-  myFile.print("\"");
-  myFile.print(",");
+  if (m < 10) myFile.print("0");
+  myFile.print(s);  myFile.print(":");
+  if (m < 10) myFile.print("0");
+  myFile.print(s);
+  myFile.print("\",");
   myFile.print(h);
   myFile.print(",");
   myFile.print(m);
@@ -234,28 +245,74 @@ void msave() { //每分钟写一次cdcard
   myFile.println(m_uams);
   myFile.close();
   if (m_uams > 100 && file_no != 0) { //只有真正有非零数据写入sdcard，才保存file_no到eeprom, 不修改file_no，则下次启动，会使用相同的文件名覆盖。
-    eedat = EEPROM.read(0xff) + 0x100; //index [0xff]=
-    EEPROM.write(eedat, file_no >> 8);
-    EEPROM.write(eedat + 0x100, file_no & 0xff);
-    file_no = 0;
+    file_no_inc();
   }
 }
+#endif
+void file_no_inc() {
+  uint16_t eedat;
+  if (file_no == 0) return;
+  eedat = EEPROM.read(0xff) + 0x100; //index [0xff]=
+  EEPROM.write(eedat, file_no >> 8);
+  EEPROM.write(eedat + 0x100, file_no & 0xff);
+  file_no = 0;
+}
+#if defined(__AVR_ATmega328P__)
+
+void com2sd() {
+  if (bf == tf) return;
+  if (!myFile.open(filename, O_RDWR | O_CREAT | O_AT_END)) return;
+  myFile.print("\"");
+  if (h < 10) myFile.print("0");
+  myFile.print(h);
+  myFile.print(":");
+  if (m < 10) myFile.print("0");
+  myFile.print(m);
+  myFile.print(":");
+  if (s < 10) myFile.print("0");
+  myFile.print(s);
+  myFile.print("\",\"");
+  while (1) {
+    if (bf == tf) break;
+    myFile.print(buffget(), HEX);
+  }
+  myFile.println("\"");
+  myFile.close();
+  if (file_no != 0) file_no_inc();
+};
+#endif
 void power_down() {
   uint16_t i;
-  for (i = 0; i < 23; i++) {
+  for (i = 2; i < 23; i++) {
     pinMode(i, INPUT);
     digitalWrite(i, LOW);
   }
   digitalWrite(LAMP, LOW);
   digitalWrite(VOUT, HIGH); //输出off
-  cli();
-  CLKPR = B10000000;
-  CLKPR = B00000011;   //调频率16Mhz到2Mhz
-  sei();
   lcd.noDisplay();
   set_sleep_mode (SLEEP_MODE_PWR_DOWN);
   sleep_enable();
+  if (v < 3200) wdt_disable(); //电压过低， 不再唤醒
   sleep_cpu ();
+  s = s + 4; //4秒唤醒;
+  if (s >= 60) {
+    m++;
+    s = s - 60;
+  }
+  if (m >= 60) {
+    h++;
+    m = 0;
+  }
+  lcd.begin(16, 2);
+  /*
+     Serial.begin(9600);
+     Serial.print(h);
+     Serial.print(":");
+     Serial.print(m);
+     Serial.print(":");
+     Serial.println(s);
+     Serial.flush();
+  */
 }
 void loop() {
   uint16_t i;
@@ -271,10 +328,10 @@ void loop() {
   lcd.setCursor(0, 0);
   if (i_error > 0) { //大电流保护，
     analogWrite(LAMP, i_error / 5 % 200 + 50); //背光闪烁 /5是慢一点， %200是 0-200调光， +50是背光调整到50-250之间变化， 一秒一个循环。
-    lcd.print("out>2A poweroff! ");
+    lcd.print(F("out>2A poweroff! "));
     lcd.setCursor(0, 1);
     lcd.print(i_error / 1000);
-    lcd.print("    ");
+    lcd.print(F("    "));
     return;
   }
 
@@ -292,7 +349,7 @@ void loop() {
     else lcd.print(is / 1000);
     lcd.print('m');
   }
-  lcd.print("A                ");
+  lcd.print(F("A                "));
   lcd.setCursor(14, 0);
   if (have_sd) lcd.print("S"); //在存入sdcard时，让屏幕的S闪动一下
   else lcd.print(" ");
@@ -305,14 +362,14 @@ void loop() {
     if (have_sd) {
       for (i = 3; i < 8; i++)
         lcd.print(filename[i]);//开始无电流时显示当次sd文件序号
-      lcd.print("         ");
+      lcd.print(F("         "));
     } else
-      lcd.print("0 mAH      ");  //无sd卡时显示0mah
+      lcd.print(F("0 mAH      "));  //无sd卡时显示0mah
   }
   else if (m_uams < 1000) { //1-1000微安*分，单位显示uAM
     lcd.print(m_uams);
     lcd.write(0xe4);
-    lcd.print("AM  ");
+    lcd.print(F("AM  "));
   }
   else {
     if (m_uams < 60000) { //1000微安时以下,单位显示uAH
@@ -323,10 +380,16 @@ void loop() {
       lcd.print(m_uams / 60000); //微安*分钟->毫安*时
       lcd.print("m");
     }
-    lcd.print("AH   "); //清后面的残留字符
+    lcd.print(F("AH   ")); //清后面的残留字符
   }
-  lcd.setCursor(8, 1); //显示开机时间
-  if (h < 10) lcd.print('0');
+  if (h >= 1000) { //9999-1000
+    lcd.setCursor(6, 1);
+  } else if (h >= 100) { //999-100
+    lcd.setCursor(7, 1);
+  } else { //99-00
+    lcd.setCursor(8, 1); //显示开机时间
+    if (h < 10) lcd.print('0');
+  }
   lcd.print(h);
   lcd.print(':');
   if (m < 10) lcd.print('0');
@@ -335,14 +398,47 @@ void loop() {
   if (s < 10) lcd.print('0');
   lcd.print(s);
   if (m_save == true) { //保存分钟数据
+#if defined(__AVR_ATmega328P__)
     if (have_sd) msave();
+#endif
     m_save = false;
     lcd.setCursor(14, 0);
     lcd.print(" ");
   }
+
   if (last0 + 600000 < millis() || v < 3200) {
-    delay(100);
-    if (last0 + 600000 < millis() || v < 3200)
+    if (v < 3200) delay(100);
+    if (last0 + 600000 < millis() || v < 3200) {
       power_down();
+    }
+  }
+  wdt_reset();
+#if defined(__AVR_ATmega328P__)
+  if (millis() > recTime + 200 & bf != tf) {
+    com2sd();
+  }
+#endif
+}
+void buffput(uint8_t dat)
+{
+  uint8_t offset = tf + 1;
+  if (offset >= 120) offset = 0;
+  if (offset == bf) return;
+  buff[tf] = dat;
+  tf = offset;
+}
+int16_t buffget() {
+  int16_t dat;
+  uint8_t offset;
+  if (bf == tf) return -1;
+  offset = bf;
+  bf++;
+  if (bf >= 120) bf = 0;
+  return (buff[offset]);
+}
+void serialEvent() {
+  while (Serial.available()) {
+    recTime = millis();
+    buffput((char)Serial.read());
   }
 }
