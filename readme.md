@@ -6,4 +6,6 @@
 
 2种接口方式：1直接输出3.6V供电，2串入到电路中进行测量。
 
+兼容LiLyPad Arduino 板子,可以直接使用arduino开发环境。  
+
 ![Image](https://github.com/lshw/iLogger/raw/master/img.jpg)
