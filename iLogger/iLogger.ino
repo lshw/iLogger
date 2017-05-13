@@ -338,8 +338,34 @@ void power_down() {
      Serial.flush();
   */
 }
+
+boolean qbon = false;
+
 void loop() {
   uint16_t i;
+
+  if (m == 0 & s < 30) { //1小时开0.5分钟
+    analogWrite(LAMP, 40);
+  //开气泵，每小时，开0.5分钟
+    if (qbon == false) {
+      Serial.end();
+      pinMode(0, OUTPUT);
+      digitalWrite(0, HIGH);
+      digitalWrite(1, HIGH);
+      qbon = true;
+    }
+  } else {
+    if ((last0 + 600000) < millis())
+      analogWrite(LAMP, 0);
+    if (qbon == true) {
+      pinMode(0, INPUT);
+      digitalWrite(0, LOW);
+      digitalWrite(1, LOW);
+      Serial.begin(115200);
+      qbon = false;
+    }
+  }
+
   if (ms % 500 != 0) {
     //不到0.1S， cpu休眠，等待time中断唤醒。
     set_sleep_mode (SLEEP_MODE_IDLE); //虽然IDLE模式省电不多， 但是不影响PWM输出的背光控制。
@@ -358,8 +384,6 @@ void loop() {
     lcd.print(F("    "));
     return;
   }
-
-  analogWrite(LAMP, 40);
   if (millis() < 2000) return;
   lcd_f2(v); //显示电池电压，2位小数
   lcd.print("V ");
@@ -434,10 +458,11 @@ void loop() {
     if (v < 3100) delay(100);
     if (last0 + 600000 < millis() || v < 3100) {
       MsTimer2::stop(); //1ms每次的时间中断关闭。
-      power_down();
+      if (qbon == false)  power_down();
     }
   }
   dogcount = 0;//喂狗
+  if (qbon == true) return;
 #if defined(__AVR_ATmega328P__)
   if (millis() > recTime + 200 & bf != tf) {
     com2sd();
