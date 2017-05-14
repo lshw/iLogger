@@ -69,7 +69,6 @@ void geti() {
         r = 330 + 3300;
         adc = I33;
       } else if (r >= 3300) {
-        Serial.println(i0);
         digitalWrite(R333, HIGH);
         digitalWrite(R33, HIGH);
         digitalWrite(R3, HIGH);
@@ -79,7 +78,6 @@ void geti() {
       continue;//循环切换档位
     } else if (i0 < 15 & r <  330000) { //调高
       if (r <= 330) {
-        Serial.println(i0);
         digitalWrite(R3, LOW);
         digitalWrite(R33, HIGH);
         digitalWrite(R333, HIGH);
@@ -235,7 +233,6 @@ void setup() {
 #endif
   setup_watchdog(WDTO_4S); //4s
 
-  analogWrite(LAMP, 40);
 }
 void lcd_f2(uint16_t dat) { //除以1000显示2位小数
   uint16_t xs;
@@ -317,7 +314,12 @@ void power_down() {
   set_sleep_mode (SLEEP_MODE_PWR_DOWN);
   sleep_enable();
   if (v < 3100) wdt_disable(); //电压过低， 不再唤醒
+
+  ADCSRA &=  ~(1 << ADEN);  // 0
+  Serial.end();
   sleep_cpu ();
+  ADCSRA |=  (1 << ADEN);
+  analogRead(adc);
   s = s + 4; //4秒唤醒;
   if (s >= 60) {
     m++;
@@ -326,29 +328,32 @@ void power_down() {
   if (m >= 60) {
     h++;
     m = 0;
+    Serial.begin(115200);
+    if (h < 10) Serial.print('0');
+    Serial.print(h);
+    Serial.print(':');
+    if (m < 10) Serial.print('0');
+    Serial.print(m);
+    Serial.print(' ');
+    Serial.print(m_uams);
+    Serial.flush();
   }
   lcd.begin(16, 2);
-  /*
-     Serial.begin(9600);
-     Serial.print(h);
-     Serial.print(":");
-     Serial.print(m);
-     Serial.print(":");
-     Serial.println(s);
-     Serial.flush();
-  */
 }
+boolean poweroff = false;
 void loop() {
   uint16_t i;
-  if (ms % 500 != 0) {
-    //不到0.1S， cpu休眠，等待time中断唤醒。
-    set_sleep_mode (SLEEP_MODE_IDLE); //虽然IDLE模式省电不多， 但是不影响PWM输出的背光控制。
-    sleep_enable();
-    sleep_cpu ();
-    analogRead(adc);
-    return;
+  if (poweroff == false) {
+    if (ms % 500 != 0) {
+      //不到0.1S， cpu休眠，等待time中断唤醒。
+      set_sleep_mode (SLEEP_MODE_IDLE); //虽然IDLE模式省电不多， 但是不影响PWM输出的背光控制。
+      sleep_enable();
+      sleep_cpu ();
+      analogRead(adc);
+      return;
+    }
+    analogWrite(LAMP, 40);
   }
-
   lcd.setCursor(0, 0);
   if (i_error > 0) { //大电流保护，
     analogWrite(LAMP, i_error / 5 % 200 + 50); //背光闪烁 /5是慢一点， %200是 0-200调光， +50是背光调整到50-250之间变化， 一秒一个循环。
@@ -359,7 +364,6 @@ void loop() {
     return;
   }
 
-  analogWrite(LAMP, 40);
   if (millis() < 2000) return;
   lcd_f2(v); //显示电池电压，2位小数
   lcd.print("V ");
@@ -430,14 +434,17 @@ void loop() {
     lcd.print(" ");
   }
 
+  dogcount = 0;//喂狗
+
   if (last0 + 600000 < millis() || v < 3100) {
     if (v < 3100) delay(100);
     if (last0 + 600000 < millis() || v < 3100) {
       MsTimer2::stop(); //1ms每次的时间中断关闭。
+      poweroff = true;
+      wdt_reset();
       power_down();
     }
   }
-  dogcount = 0;//喂狗
 #if defined(__AVR_ATmega328P__)
   if (millis() > recTime + 200 & bf != tf) {
     com2sd();
