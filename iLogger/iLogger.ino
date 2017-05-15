@@ -468,9 +468,11 @@ int16_t buffget() {
   if (bf >= 120) bf = 0;
   return (buff[offset]);
 }
+/*
 void serialEvent() {
   while (Serial.available()) {
     recTime = millis();
     buffput((char)Serial.read());
   }
 }
+*/
