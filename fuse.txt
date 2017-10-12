@@ -1,0 +1,2 @@
+atmega 328p  lowfuse:DC  highfuse:FC   extfuse:FF
+OSC:7372800hz
