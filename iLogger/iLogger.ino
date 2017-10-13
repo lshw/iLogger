@@ -1,5 +1,6 @@
-#define  NEWPCB 1   //如果是输出接口是2个腿的，就是老版本的，要把本行注释掉，
+#define  NEWPCB 1   //如果是输出接口是2个腿的，就是老版本的，要把本行注释掉,
 //型号选择UNO或者  LiLyPad Arduino 168,或者LiLyPad Arduino 328, 其中168 ram/rom都不够，所以无SD卡功能
+//需要安装 MsTimer2 lib
 #include <EEPROM.h>
 #include <LiquidCrystal.h>
 #include <MsTimer2.h>
@@ -8,9 +9,8 @@
 #include <avr/wdt.h>
 #include <avr/sleep.h>
 #if defined(__AVR_ATmega328P__) //  168内存不够，不能带SD卡功能
-#define USE_SEPARATE_FAT_CACHE 0
-#include <SdFat.h>
-SdFat card;
+#include <SPI.h>
+#include <SD.h>
 File myFile;
 #define chipSelect  10
 #endif
@@ -221,11 +221,12 @@ void setup() {
   r = 330;
   MsTimer2::start(); //1ms每次的时间中断开始。
 #if defined(__AVR_ATmega328P__)
-  have_sd = card.begin(chipSelect);
+  have_sd = SD.begin(chipSelect);
   if (have_sd) {
     init_filename();//根据file_no 生成文件名，放在filename
-    card.remove(filename);
-    if (myFile.open(filename, O_RDWR | O_CREAT | O_AT_END)) {
+    SD.remove(filename);
+    myFile = SD.open(filename, FILE_WRITE);
+    if (myFile) {
       myFile.println(F("hh:mm:ss,hour,minute,V(mv),I(ua),total(ua*minute)"));
       myFile.close();
     }
@@ -245,7 +246,8 @@ void lcd_f2(uint16_t dat) { //除以1000显示2位小数
 }
 #if defined(__AVR_ATmega328P__)
 void msave() { //每分钟写一次cdcard
-  if (!myFile.open(filename, O_RDWR | O_CREAT | O_AT_END)) return;
+  myFile = SD.open(filename, FILE_WRITE);
+  if (!myFile) return;
   myFile.print("\"");
   if (h < 10) myFile.print("0");
   myFile.print(h);
@@ -282,7 +284,8 @@ void file_no_inc() {
 
 void com2sd() {
   if (bf == tf) return;
-  if (!myFile.open(filename, O_RDWR | O_CREAT | O_AT_END)) return;
+  myFile = SD.open(filename, FILE_WRITE);
+  if (!myFile) return;
   myFile.print("\"");
   if (h < 10) myFile.print("0");
   myFile.print(h);
@@ -460,7 +463,6 @@ void buffput(uint8_t dat)
   tf = offset;
 }
 int16_t buffget() {
-  int16_t dat;
   uint8_t offset;
   if (bf == tf) return -1;
   offset = bf;
