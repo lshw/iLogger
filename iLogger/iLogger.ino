@@ -162,6 +162,14 @@ void init_filename() {
 }
 void eeprom_init() {
   uint16_t i;
+  uint8_t ch;
+  for(i=0;i<16;i++) {
+  ch=EEPROM.read(i+0x11);
+  if(ch<' ' or ch>=0x80) {
+  EEPROM.write(0x304,0);
+  break;
+  }
+  }
   if (EEPROM.read(0x304) != 'S' || EEPROM.read(0x202) != 'W') { //初始化eeprom
     for (i = 0; i < 0x400; i++) EEPROM.write(i, 0);
     EEPROM.write(0x304, 'S');
@@ -204,8 +212,8 @@ void setup() {
   analogReference(INTERNAL);//atmega328 -> 基准电压1.1v
   lcd.begin(16, 2);
   Serial.begin(115200);
-  Serial.println(F("iLogger V1.7"));
-  lcd.print(F("iLogger V1.7"));
+  Serial.println(F("iLogger V1.8"));
+  lcd.print(F("iLogger V1.8"));
   lcd.setCursor(0, 1);
   for (i = 0; i < 16; i++)
     lcd.write(EEPROM.read(i + 0x11));
