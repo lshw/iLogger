@@ -361,6 +361,7 @@ void loop() {
   if (i_error > 0) { //大电流保护，
     analogWrite(LAMP, i_error / 5 % 200 + 50); //背光闪烁 /5是慢一点， %200是 0-200调光， +50是背光调整到50-250之间变化， 一秒一个循环。
     lcd.print(F("out>2A poweroff! "));
+    digitalWrite(VOUT,HIGH);
     lcd.setCursor(0, 1);
     lcd.print(i_error / 1000);
     lcd.print(F("    "));
