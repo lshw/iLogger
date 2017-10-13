@@ -298,7 +298,7 @@ void com2sd() {
   myFile.print("\",\"");
   while (1) {
     if (bf == tf) break;
-    myFile.print(buffget(), HEX);
+    myFile.print(buffget());
   }
   myFile.println("\"");
   myFile.close();
