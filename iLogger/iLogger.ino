@@ -292,6 +292,9 @@ void file_no_inc() {
 
 void com2sd() {
   if (bf == tf) return;
+
+  analogWrite(LAMP,0);
+  if(have_sd) {
   myFile = SD.open(filename, FILE_WRITE);
   if (!myFile) return;
   myFile.print("\"");
@@ -304,12 +307,17 @@ void com2sd() {
   if (s < 10) myFile.print("0");
   myFile.print(s);
   myFile.print("\",\"");
+  }
   while (1) {
     if (bf == tf) break;
-    myFile.print(buffget());
+  if(have_sd)  myFile.write(buffget());
+  else buffget();
   }
+  if(have_sd) {
   myFile.println("\"");
   myFile.close();
+  }
+  analogWrite(LAMP,40);
   if (file_no != 0) file_no_inc();
 };
 #endif
