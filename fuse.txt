@@ -1,2 +1,27 @@
 atmega 328p  lowfuse:DC  highfuse:FC   extfuse:FF
 OSC:7372800hz
+
+新量产的 V3.2
+用16Mhz晶振， 兼容uno的板子，
+通过isp写bootloader时，要用老版本的arduino 1.0.5
+用一个uno开发板， 13-sck  12-MISO 11-MOSI 10-RST
+把这4根线还有vcc，gnd 都连到目标板上
+或者用UNO开发板的ICSP 6芯座：
+1 2
+3 4
+5 6
+
+1-MISO
+2-5V
+3-SCK
+4-MOSI
+5-NC
+6-GND
+
+先选择 示例程序:arduinoISP 写入uno开发板， 把uno开发板变成一个isp下载器
+然后选择 下载器类型 "arduino as ISP"
+然后就可以选菜单烧录bootloader到目标板
+或者用下面的脚本来写(debian环境 安装 debian源里的arduino1.0.5)
+
+/usr/share/arduino/hardware/tools/avrdude -C/usr/share/arduino/hardware/tools/avrdude.conf -v -v -v -v -patmega328p -cstk500v1 -P/dev/ttyACM0 -b19200 -e -Ulock:w:0xff:m -Uefuse:w:0xfd:m -Uhfuse:w:0xde:m -Ulfuse:w:0xff:m ;\
+/usr/share/arduino/hardware/tools/avrdude -C/usr/share/arduino/hardware/tools/avrdude.conf -v -v -v -v -patmega328p -cstk500v1 -P/dev/ttyACM0 -b19200 -Uflash:w:/usr/share/arduino/hardware/arduino/bootloaders/optiboot/optiboot_atmega328.hex:i -Ulock:w:0xcf:m 
