@@ -76,7 +76,7 @@ void geti() {
         adc = I03;
       }
       continue;//循环切换档位
-    } else if (i0 < 15 & r <  330000) { //调高
+    } else if (i0 < 15 && r <  330000) { //调高
       if (r <= 330) {
         digitalWrite(R3, LOW);
         digitalWrite(R33, HIGH);
@@ -169,7 +169,7 @@ void eeprom_init() {
   uint8_t ch;
   for (i = 0; i < 16; i++) {
     ch = EEPROM.read(i + 0x11);
-    if (ch<' ' or ch >= 0x80) {
+    if (ch < ' ' || ch >= 0x80) {
       EEPROM.write(0x304, 0);
       break;
     }
@@ -252,6 +252,20 @@ void setup() {
 #if defined(__AVR_ATmega328P__)
   have_sd = SD.begin(chipSelect);
   if (have_sd) {
+    strcpy(filename, F("logo.txt")); //将SD卡上的logo.txt的字符串, 写到eeprom中作为开机logo
+    if (SD.exists(filename)) {
+      myFile = SD.open(filename, O_READ);
+      for (i = 0; i < 16; i++) {
+        if (myFile.size() >= i) {
+          EEPROM.write(i + 0x11, myFile.read());
+          if (EEPROM.read(i + 0x11) >= ' ' && EEPROM.read(i + 0x11) < 0x80)
+            continue;
+        }
+        EEPROM.write(i + 0x11, ' ');
+      }
+      myFile.close();
+      SD.remove(filename);
+    }
     init_filename();//根据file_no 生成文件名，放在filename
     SD.remove(filename);
     myFile = SD.open(filename, FILE_WRITE);
@@ -500,7 +514,7 @@ void loop() {
     }
   }
 #if defined(__AVR_ATmega328P__)
-  if (millis() > recTime + 200 & bf != tf) {
+  if (millis() > recTime + 200 && bf != tf) {
     com2sd();
   }
 #endif
@@ -527,4 +541,18 @@ void serialEvent() {
 
     buffput((char)Serial.read());
   }
+}
+
+//将字符串，从rom复制到字符串变量中，节省ram
+inline char  *strcpy(char *dest, const __FlashStringHelper *ifsh) {
+  uint16_t i = 0;
+  char bc;
+  PGM_P p = reinterpret_cast<PGM_P>(ifsh);
+  while (bc = pgm_read_byte(p + i))
+  {
+    dest[i] = bc;
+    i++ ;
+    dest[i] = 0;
+  }
+  return dest;
 }
