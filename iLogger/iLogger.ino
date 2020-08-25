@@ -42,7 +42,7 @@ uint8_t m = 0, s = 0, adc = I333;
 uint16_t ms = 0;
 uint16_t h = 0;
 boolean m_save = false; //主循环需要保存当前分钟电流
-uint16_t  v, i_error_ma,i_error = 0; //v->电池电压mv，电流大于2A，报警倒计数（ms)
+uint16_t  v, i_error_ma, i_error = 0; //v->电池电压mv，电流大于2A，报警倒计数（ms)
 uint32_t mv; //采样值 mv，
 uint32_t r;//采样电阻，毫欧
 uint32_t ua = 0; //当前电流微安
@@ -167,12 +167,12 @@ void init_filename() {
 void eeprom_init() {
   uint16_t i;
   uint8_t ch;
-  for(i=0;i<16;i++) {
-  ch=EEPROM.read(i+0x11);
-  if(ch<' ' or ch>=0x80) {
-  EEPROM.write(0x304,0);
-  break;
-  }
+  for (i = 0; i < 16; i++) {
+    ch = EEPROM.read(i + 0x11);
+    if (ch<' ' or ch >= 0x80) {
+      EEPROM.write(0x304, 0);
+      break;
+    }
   }
   if (EEPROM.read(0x304) != 'S' || EEPROM.read(0x202) != 'W') { //初始化eeprom
     for (i = 0; i < 0x400; i++) EEPROM.write(i, 0);
@@ -207,22 +207,25 @@ void setup_watchdog(int ii) {
   WDTCSR = bb;
   WDTCSR |= _BV(WDIE);
 }
-
+uint16_t bat_v0, bat_r; //电池的空载电压，电池内阻
 void setup() {
   uint16_t i;
-  pinMode(LAMP, OUTPUT);
-  analogWrite(LAMP, 40);
-  eeprom_init();
+  uint8_t oumchar[8] = {  /*欧姆*/
+    0b11011,
+    0b10101,
+    0b10101,
+    0b00000,
+    0b11111,
+    0b10001,
+    0b01010,
+    0b11011
+  };
   analogReference(INTERNAL);//atmega328 -> 基准电压1.1v
-  lcd.begin(16, 2);
-  Serial.begin(115200);
-  Serial.println(F("iLogger V1.8"));
-  lcd.print(F("iLogger V1.8"));
-  lcd.setCursor(0, 1);
-  for (i = 0; i < 16; i++)
-    lcd.write(EEPROM.read(i + 0x11));
   pinMode(VOUT, OUTPUT);
-  digitalWrite(VOUT, LOW);  //打开输出
+  digitalWrite(VOUT, HIGH);  //关闭输出
+  i = (uint32_t) analogRead(VBAT) * 11 * 1100 / 1024; //电池电压
+  delay(10);
+  bat_v0 = (uint32_t) analogRead(VBAT) * 11 * 1100 / 1024; //电池电压
   MsTimer2::set(1, seta); //每 1ms 时间中断一次， 调用seta();
   pinMode(R3, OUTPUT);
   pinMode(R33, OUTPUT);
@@ -232,6 +235,20 @@ void setup() {
   digitalWrite(R333, HIGH);
   r = 330;
   MsTimer2::start(); //1ms每次的时间中断开始。
+  delay(2);
+  digitalWrite(VOUT, LOW);  //打开输出
+  pinMode(LAMP, OUTPUT);
+  analogWrite(LAMP, 40);
+  eeprom_init();
+  lcd.begin(16, 2);
+  lcd.createChar(1, oumchar);   //om
+  Serial.begin(115200);
+  Serial.println(F("iLogger V1.9"));
+  lcd.setCursor(0, 0);
+  lcd.print(F("iLogger V1.9"));
+  lcd.setCursor(0, 1);
+  for (i = 0; i < 16; i++)
+    lcd.write(EEPROM.read(i + 0x11));
 #if defined(__AVR_ATmega328P__)
   have_sd = SD.begin(chipSelect);
   if (have_sd) {
@@ -245,7 +262,6 @@ void setup() {
   }
 #endif
   setup_watchdog(WDTO_4S); //4s
-
 }
 void lcd_f2(uint16_t dat) { //除以1000显示2位小数
   uint16_t xs;
@@ -297,31 +313,31 @@ void file_no_inc() {
 void com2sd() {
   if (bf == tf) return;
 
-  analogWrite(LAMP,0);
-  if(have_sd) {
-  myFile = SD.open(filename, FILE_WRITE);
-  if (!myFile) return;
-  myFile.print("\"");
-  if (h < 10) myFile.print("0");
-  myFile.print(h);
-  myFile.print(":");
-  if (m < 10) myFile.print("0");
-  myFile.print(m);
-  myFile.print(":");
-  if (s < 10) myFile.print("0");
-  myFile.print(s);
-  myFile.print("\",\"");
+  analogWrite(LAMP, 0);
+  if (have_sd) {
+    myFile = SD.open(filename, FILE_WRITE);
+    if (!myFile) return;
+    myFile.print("\"");
+    if (h < 10) myFile.print("0");
+    myFile.print(h);
+    myFile.print(":");
+    if (m < 10) myFile.print("0");
+    myFile.print(m);
+    myFile.print(":");
+    if (s < 10) myFile.print("0");
+    myFile.print(s);
+    myFile.print("\",\"");
   }
   while (1) {
     if (bf == tf) break;
-  if(have_sd)  myFile.write(buffget());
-  else buffget();
+    if (have_sd)  myFile.write(buffget());
+    else buffget();
   }
-  if(have_sd) {
-  myFile.println("\"");
-  myFile.close();
+  if (have_sd) {
+    myFile.println("\"");
+    myFile.close();
   }
-  analogWrite(LAMP,40);
+  analogWrite(LAMP, 40);
   if (file_no != 0) file_no_inc();
 };
 #endif
@@ -413,12 +429,24 @@ void loop() {
   else lcd.print('A'); //第1档位
   lcd.setCursor(0, 1);  //lcd第二行
   if (m_uams == 0) {
-    if (have_sd) {
-      for (i = 3; i < 8; i++)
-        lcd.print(filename[i]);//开始无电流时显示当次sd文件序号
-      lcd.print(F("         "));
-    } else
-      lcd.print(F("0 mAH      "));  //无sd卡时显示0mah
+    if (ua > 10000 && millis() > 1000 && millis() < 50000) { //在开机1秒后和10秒前， 显示电池内阻
+      bat_r = (uint32_t) (bat_v0 - v) * 1000 / (ua / 1000);
+      Serial.print(F("bat_v0:")); Serial.println(bat_v0);
+      Serial.print(F("v:")); Serial.println(v);
+      Serial.print(F("ua:")); Serial.println(ua);
+      Serial.print(F("bat_r:")); Serial.println(bat_r);
+      lcd.print(F("R="));  //
+      lcd.print(bat_r);  //显示电池内阻
+      lcd.write(0x01);
+      lcd.print(F("         ")); //毫欧姆
+    } else {
+      if (have_sd) {
+        for (i = 3; i < 8; i++)
+          lcd.print(filename[i]);//开始无电流时显示当次sd文件序号
+        lcd.print(F("         "));
+      } else
+        lcd.print(F("0 mAH      "));  //无sd卡时显示0mah
+    }
   }
   else if (m_uams < 1000) { //1-1000微安*分，单位显示uAM
     lcd.print(m_uams);
