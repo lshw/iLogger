@@ -42,7 +42,7 @@ uint8_t m = 0, s = 0, adc = I333;
 uint16_t ms = 0;
 uint16_t h = 0;
 boolean m_save = false; //主循环需要保存当前分钟电流
-uint16_t  v, i_error = 0; //v->电池电压mv，电流大于2A，报警倒计数（ms)
+uint16_t  v, i_error_ma,i_error = 0; //v->电池电压mv，电流大于2A，报警倒计数（ms)
 uint32_t mv; //采样值 mv，
 uint32_t r;//采样电阻，毫欧
 uint32_t ua = 0; //当前电流微安
@@ -55,7 +55,7 @@ void geti() {
   for (uint8_t i = 0; i < 3; i++) { //循环切换档位
     i0 = analogRead(adc);
     if (i0 > 300) i0 = analogRead(adc);
-    if (i0 > 200 & r > 330) { //调低采样电阻
+    if (i0 > 200 && r > 330) { //调低采样电阻
       if (r >= 330000) {
         digitalWrite(R333, HIGH);
         digitalWrite(R33, LOW);
@@ -138,8 +138,12 @@ void seta() { //每毫秒一次时间中断服务，采样电流和电压， 根
   if (ua > 2000000) {
     delay(1);
     geti();
-    if (ua > 2000000)
+    geti();
+    geti();
+    if (ua > 2000000) {
+      i_error_ma = ua / 1000;
       i_error = 10000; //电流超过2A，关闭10秒
+    }
     return;
   }
   if (ua != 0) {
@@ -377,10 +381,12 @@ void loop() {
   if (i_error > 0) { //大电流保护，
     analogWrite(LAMP, i_error / 5 % 200 + 50); //背光闪烁 /5是慢一点， %200是 0-200调光， +50是背光调整到50-250之间变化， 一秒一个循环。
     lcd.print(F("out>2A poweroff! "));
-    digitalWrite(VOUT,HIGH);
+    digitalWrite(VOUT, HIGH);
     lcd.setCursor(0, 1);
     lcd.print(i_error / 1000);
-    lcd.print(F("    "));
+    lcd.write(' ');
+    lcd.print(i_error_ma);
+    lcd.print(F("ma"));
     return;
   }
 

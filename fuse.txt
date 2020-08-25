@@ -1,7 +1,3 @@
-atmega 328p  lowfuse:DC  highfuse:FC   extfuse:FF
-OSC:7372800hz
-
-新量产的 V3.2
 用16Mhz晶振， 兼容uno的板子，
 通过isp写bootloader时，要用老版本的arduino 1.0.5
 用一个uno开发板， 13-sck  12-MISO 11-MOSI 10-RST
