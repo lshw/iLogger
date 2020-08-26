@@ -8,6 +8,7 @@
 #include <avr/sleep.h>
 #include <avr/wdt.h>
 #include <avr/sleep.h>
+#include <avr/power.h>
 #if defined(__AVR_ATmega328P__) //  168内存不够，不能带SD卡功能
 #include <SPI.h>
 #include <SD.h>
@@ -223,9 +224,15 @@ void setup() {
   analogReference(INTERNAL);//atmega328 -> 基准电压1.1v
   pinMode(VOUT, OUTPUT);
   digitalWrite(VOUT, HIGH);  //关闭输出
+  ACSR &= ~_BV(ACIE);    //关闭ACD
+  ACSR |= _BV(ACD);
   i = (uint32_t) analogRead(VBAT) * 11 * 1100 / 1024; //电池电压
-  delay(10);
-  bat_v0 = (uint32_t) analogRead(VBAT) * 11 * 1100 / 1024; //电池电压
+  clock_prescale_set(8); // 0->8mhz,1->4mhz,2->2mhz,3->1mhz,4->500khz,5>250khz,6->125khz,7->62.5khz,8->31.25khz
+  set_sleep_mode (SLEEP_MODE_ADC);
+  sleep_cpu (); //进入休眠，等测量完成，会继续执行
+  bat_v0 = (ADCH << 8) | ADCL;
+  bat_v0 = (uint32_t) bat_v0 * 11 * 1100 / 1024; //电池电压
+  clock_prescale_set(0); // 0->8mhz,1->4mhz,2->2mhz,3->1mhz,4->500khz,5>250khz,6->125khz,7->62.5khz,8->31.25khz
   MsTimer2::set(1, seta); //每 1ms 时间中断一次， 调用seta();
   pinMode(R3, OUTPUT);
   pinMode(R33, OUTPUT);
@@ -243,9 +250,9 @@ void setup() {
   lcd.begin(16, 2);
   lcd.createChar(1, oumchar);   //om
   Serial.begin(115200);
-  Serial.println(F("iLogger V1.9"));
+  Serial.println(F("iLogger V2.0"));
   lcd.setCursor(0, 0);
-  lcd.print(F("iLogger V1.9"));
+  lcd.print(F("iLogger V2.0"));
   lcd.setCursor(0, 1);
   for (i = 0; i < 16; i++)
     lcd.write(EEPROM.read(i + 0x11));
@@ -444,7 +451,7 @@ void loop() {
   lcd.setCursor(0, 1);  //lcd第二行
   if (m_uams == 0) {
     if (ua > 10000 && millis() > 1000 && millis() < 50000) { //在开机1秒后和10秒前， 显示电池内阻
-      bat_r = (uint32_t) (bat_v0 - v) * 1000 / (ua / 1000);
+      bat_r = (uint32_t) (bat_v0 - v) * 1000 / (ua / 1000);  //8是8ma的iLogger , 电池内阻R=(V1-V2)/(i2-i1) ；公式推导过程略  ;实际上使用i1=0
       Serial.print(F("bat_v0:")); Serial.println(bat_v0);
       Serial.print(F("v:")); Serial.println(v);
       Serial.print(F("ua:")); Serial.println(ua);
