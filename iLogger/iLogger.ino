@@ -378,7 +378,6 @@ void power_down() {
   if (v < 3200) wdt_disable();  //电压过低， 不再唤醒
 
   ADCSRA &= ~(1 << ADEN);    // 0
-  digitalWrite(VOUT, HIGH);  //关闭输出
   Serial.end();
   sleep_cpu();
   ADCSRA |= (1 << ADEN);
@@ -401,7 +400,6 @@ void power_down() {
     Serial.flush();
   }
   lcd.begin(16, 2);
-  digitalWrite(VOUT, LOW);  //打开输出
   r = 330 + 3300 + 33000;   //lll->llh
   gpio_setup();
   geti();
