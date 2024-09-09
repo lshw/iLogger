@@ -209,20 +209,30 @@ void setup_watchdog(int ii) {
   WDTCSR |= _BV(WDIE);
 }
 uint16_t bat_v0, bat_r;  //电池的空载电压，电池内阻
+void gpio_setup() {
+  pinMode(VOUT, OUTPUT);
+  pinMode(LAMP, OUTPUT);
+  pinMode(R3, OUTPUT);
+  pinMode(R33, OUTPUT);
+  pinMode(R333, OUTPUT);
+  digitalWrite(R3, HIGH);
+  digitalWrite(R33, HIGH);
+  digitalWrite(R333, HIGH);
+}
+uint8_t oumchar[8] = { /*欧姆*/
+                       0b11011,
+                       0b10101,
+                       0b10101,
+                       0b00000,
+                       0b11111,
+                       0b10001,
+                       0b01010,
+                       0b11011
+};
 void setup() {
   uint16_t i;
-  uint8_t oumchar[8] = { /*欧姆*/
-                         0b11011,
-                         0b10101,
-                         0b10101,
-                         0b00000,
-                         0b11111,
-                         0b10001,
-                         0b01010,
-                         0b11011
-  };
   analogReference(INTERNAL);  //atmega328 -> 基准电压1.1v
-  pinMode(VOUT, OUTPUT);
+  gpio_setup();
   digitalWrite(VOUT, HIGH);  //关闭输出
   ACSR &= ~_BV(ACIE);        //关闭ACD
   ACSR |= _BV(ACD);
@@ -234,25 +244,17 @@ void setup() {
   bat_v0 = (uint32_t)bat_v0 * 11 * 1100 / 1024;  //电池电压
   clock_prescale_set(0);                         // 0->8mhz,1->4mhz,2->2mhz,3->1mhz,4->500khz,5>250khz,6->125khz,7->62.5khz,8->31.25khz
   MsTimer2::set(1, seta);                        //每 1ms 时间中断一次， 调用seta();
-  pinMode(R3, OUTPUT);
-  pinMode(R33, OUTPUT);
-  pinMode(R333, OUTPUT);
-  digitalWrite(R3, HIGH);
-  digitalWrite(R33, HIGH);
-  digitalWrite(R333, HIGH);
   r = 330;
   MsTimer2::start();  //1ms每次的时间中断开始。
   delay(2);
   digitalWrite(VOUT, LOW);  //打开输出
-  pinMode(LAMP, OUTPUT);
   analogWrite(LAMP, 40);
   eeprom_init();
   lcd.begin(16, 2);
-  lcd.createChar(1, oumchar);  //om
   Serial.begin(115200);
-  Serial.println(F("iLogger V2.0"));
+  Serial.println(F("iLogger V2.1"));
   lcd.setCursor(0, 0);
-  lcd.print(F("iLogger V2.0"));
+  lcd.print(F("iLogger V2.1"));
   lcd.setCursor(0, 1);
   for (i = 0; i < 16; i++)
     lcd.write(EEPROM.read(i + 0x11));
@@ -335,7 +337,7 @@ void file_no_inc() {
 void com2sd() {
   if (bf == tf) return;
 
-  analogWrite(LAMP, 0);
+  digitalWrite(LAMP, LOW);
   if (have_sd) {
     myFile = SD.open(filename, FILE_WRITE);
     if (!myFile) return;
@@ -370,17 +372,16 @@ void power_down() {
     digitalWrite(i, LOW);
   }
   digitalWrite(LAMP, LOW);
-  digitalWrite(VOUT, HIGH);  //输出off
-  lcd.noDisplay();
+  //lcd.noDisplay();
   set_sleep_mode(SLEEP_MODE_PWR_DOWN);
   sleep_enable();
-  if (v < 3100) wdt_disable();  //电压过低， 不再唤醒
+  if (v < 3200) wdt_disable();  //电压过低， 不再唤醒
 
-  ADCSRA &= ~(1 << ADEN);  // 0
+  ADCSRA &= ~(1 << ADEN);    // 0
+  digitalWrite(VOUT, HIGH);  //关闭输出
   Serial.end();
   sleep_cpu();
   ADCSRA |= (1 << ADEN);
-  analogRead(adc);
   s = s + 4;  //4秒唤醒;
   if (s >= 60) {
     m++;
@@ -400,22 +401,29 @@ void power_down() {
     Serial.flush();
   }
   lcd.begin(16, 2);
-}
-boolean poweroff = false;
-void loop() {
-  uint16_t i;
-  if (poweroff == false) {
-    if (ms % 500 != 0) {
-      //不到0.1S， cpu休眠，等待time中断唤醒。
-      set_sleep_mode(SLEEP_MODE_IDLE);  //虽然IDLE模式省电不多， 但是不影响PWM输出的背光控制。
-      sleep_enable();
-      sleep_cpu();
-      analogRead(adc);
-      return;
-    }
+  digitalWrite(VOUT, LOW);  //打开输出
+  r = 330 + 3300 + 33000;   //lll->llh
+  gpio_setup();
+  geti();
+  geti();
+  if (ua > 1) {
+    lcd.createChar(1, oumchar);  //om
     analogWrite(LAMP, 40);
   }
+}
+void loop() {
+  uint16_t i;
+  if (ms % 500 != 0) {
+    //不到0.1S， cpu休眠，等待time中断唤醒。
+    set_sleep_mode(SLEEP_MODE_IDLE);  //虽然IDLE模式省电不多， 但是不影响PWM输出的背光控制。
+    sleep_enable();
+    sleep_cpu();
+    analogRead(adc);
+    return;
+  }
   lcd.setCursor(0, 0);
+  if (ua > 1)
+    analogWrite(LAMP, 40);
   if (i_error > 0) {                            //大电流保护，
     analogWrite(LAMP, i_error / 5 % 200 + 50);  //背光闪烁 /5是慢一点， %200是 0-200调光， +50是背光调整到50-250之间变化， 一秒一个循环。
     lcd.print(F("out>2A poweroff! "));
@@ -512,13 +520,13 @@ void loop() {
 
   dogcount = 0;  //喂狗
 
-  if (last0 + 600000 < millis() || v < 3100) {
+  if (last0 + 10000 < millis() || v < 3200) {
     if (v < 3100) delay(100);
-    if (last0 + 600000 < millis() || v < 3100) {
+    if (last0 + 10000 < millis() || v < 3200) {
       MsTimer2::stop();  //1ms每次的时间中断关闭。
-      poweroff = true;
       wdt_reset();
       power_down();
+      MsTimer2::start();  //1ms每次的时间中断。
     }
   }
 #if defined(__AVR_ATmega328P__)
